@@ -1,0 +1,10 @@
+package com.legacyloop.core.service;
+
+import com.legacyloop.core.dto.response.PlacementStatsResponse;
+
+public interface AnalyticsService {
+
+    PlacementStatsResponse placementStats();
+
+    byte[] exportApplicationsCsv();
+}

@@ -1,0 +1,98 @@
+package com.legacyloop.core.controller;
+
+import com.legacyloop.common.dto.ApiResponse;
+import com.legacyloop.common.dto.PageResponse;
+import com.legacyloop.core.dto.request.ApplyRequest;
+import com.legacyloop.core.dto.request.GrantReferralRequest;
+import com.legacyloop.core.dto.request.UpdateApplicationStatusRequest;
+import com.legacyloop.core.dto.response.ApplicationResponse;
+import com.legacyloop.core.dto.response.ReferralResponse;
+import com.legacyloop.core.dto.response.ResumeAnalysisResponse;
+import com.legacyloop.core.service.AiAnalysisService;
+import com.legacyloop.core.service.ApplicationService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/v1/applications")
+@RequiredArgsConstructor
+@Tag(name = "Applications", description = "Applying, tracking and moving candidates through the pipeline")
+public class ApplicationController {
+
+    private final ApplicationService applicationService;
+    private final AiAnalysisService aiAnalysisService;
+
+    @PostMapping("/jobs/{jobId}")
+    @Operation(summary = "Apply to a job",
+            description = "Returns immediately; the ATS analysis runs asynchronously (SRS REQ-3.3)")
+    @PreAuthorize("hasRole('STUDENT')")
+    public ResponseEntity<ApiResponse<ApplicationResponse>> apply(@PathVariable Long jobId,
+                                                                  @Valid @RequestBody ApplyRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(
+                applicationService.apply(jobId, request),
+                "Application submitted. Your ATS score will appear shortly."));
+    }
+
+    @GetMapping("/mine")
+    @Operation(summary = "Your applications")
+    @PreAuthorize("hasRole('STUDENT')")
+    public ResponseEntity<ApiResponse<PageResponse<ApplicationResponse>>> mine(
+            @PageableDefault(size = 10) Pageable pageable) {
+        return ResponseEntity.ok(ApiResponse.success(applicationService.myApplications(pageable)));
+    }
+
+    @GetMapping("/{applicationId}")
+    @Operation(summary = "Application detail")
+    public ResponseEntity<ApiResponse<ApplicationResponse>> byId(@PathVariable Long applicationId) {
+        return ResponseEntity.ok(ApiResponse.success(applicationService.getById(applicationId)));
+    }
+
+    @GetMapping("/jobs/{jobId}")
+    @Operation(summary = "Candidates for a job",
+            description = "Profiles plus ATS match percentages (SRS REQ-4.2)")
+    @PreAuthorize("hasAnyRole('ALUMNI','INSTITUTION_STAFF','PLATFORM_ADMIN')")
+    public ResponseEntity<ApiResponse<PageResponse<ApplicationResponse>>> forJob(
+            @PathVariable Long jobId, @PageableDefault(size = 20) Pageable pageable) {
+        return ResponseEntity.ok(ApiResponse.success(applicationService.forJob(jobId, pageable)));
+    }
+
+    @PatchMapping("/{applicationId}/status")
+    @Operation(summary = "Move an application",
+            description = "Only legal transitions are accepted; students may only withdraw")
+    public ResponseEntity<ApiResponse<ApplicationResponse>> updateStatus(
+            @PathVariable Long applicationId,
+            @Valid @RequestBody UpdateApplicationStatusRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(
+                applicationService.updateStatus(applicationId, request), "Status updated"));
+    }
+
+    @GetMapping("/{applicationId}/analysis")
+    @Operation(summary = "ATS analysis for an application")
+    public ResponseEntity<ApiResponse<ResumeAnalysisResponse>> analysis(@PathVariable Long applicationId) {
+        return ResponseEntity.ok(ApiResponse.success(aiAnalysisService.getForApplication(applicationId)));
+    }
+
+    @PostMapping("/referrals")
+    @Operation(summary = "Grant a referral", description = "Consumes one referral slot on the job")
+    @PreAuthorize("hasAnyRole('ALUMNI','INSTITUTION_STAFF','PLATFORM_ADMIN')")
+    public ResponseEntity<ApiResponse<ReferralResponse>> grantReferral(
+            @Valid @RequestBody GrantReferralRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(applicationService.grantReferral(request), "Referral granted"));
+    }
+
+    @GetMapping("/referrals/mine")
+    @Operation(summary = "Referrals you granted or received")
+    public ResponseEntity<ApiResponse<PageResponse<ReferralResponse>>> myReferrals(
+            @PageableDefault(size = 10) Pageable pageable) {
+        return ResponseEntity.ok(ApiResponse.success(applicationService.myReferrals(pageable)));
+    }
+}

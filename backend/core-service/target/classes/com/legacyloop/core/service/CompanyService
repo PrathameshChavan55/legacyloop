@@ -1,0 +1,17 @@
+package com.legacyloop.core.service;
+
+import com.legacyloop.common.dto.PageResponse;
+import com.legacyloop.core.dto.request.CreateCompanyRequest;
+import com.legacyloop.core.dto.response.CompanyResponse;
+import org.springframework.data.domain.Pageable;
+
+public interface CompanyService {
+
+    CompanyResponse create(CreateCompanyRequest request);
+
+    CompanyResponse getById(Long companyId);
+
+    PageResponse<CompanyResponse> search(String name, Pageable pageable);
+
+    CompanyResponse verify(Long companyId);
+}
