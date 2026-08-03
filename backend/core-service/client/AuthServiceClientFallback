@@ -1,0 +1,37 @@
+package com.legacyloop.core.client;
+
+import com.legacyloop.common.dto.ApiResponse;
+import com.legacyloop.common.dto.UserSummaryDto;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.cloud.openfeign.FallbackFactory;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+import java.util.Map;
+
+/**
+ * A jobs page must still render when auth-service is briefly down: the poster shows as
+ * "Unknown user" instead of the whole request failing with a 503.
+ */
+@Slf4j
+@Component
+public class AuthServiceClientFallback implements FallbackFactory<AuthServiceClient> {
+
+    @Override
+    public AuthServiceClient create(Throwable cause) {
+        log.error("auth-service unavailable, degrading to placeholder user data", cause);
+
+        return new AuthServiceClient() {
+            @Override
+            public ApiResponse<UserSummaryDto> getUser(Long userId) {
+                return ApiResponse.success(UserSummaryDto.unknown(userId));
+            }
+
+            @Override
+            public ApiResponse<List<UserSummaryDto>> getUsers(Map<String, List<Long>> body) {
+                List<Long> ids = body.getOrDefault("userIds", List.of());
+                return ApiResponse.success(ids.stream().map(UserSummaryDto::unknown).toList());
+            }
+        };
+    }
+}

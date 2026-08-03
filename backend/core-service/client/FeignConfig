@@ -1,0 +1,44 @@
+package com.legacyloop.core.client;
+
+import com.legacyloop.common.constant.SecurityConstants;
+import feign.Request;
+import feign.RequestInterceptor;
+import feign.Retryer;
+import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+
+import java.util.concurrent.TimeUnit;
+
+/**
+ * Not annotated @Configuration on purpose: a Feign configuration class picked up by
+ * component scan becomes the default for every Feign client in the app.
+ */
+public class FeignConfig {
+
+    @Value("${legacyloop.security.internal-api-key}")
+    private String internalApiKey;
+
+    /** Every outbound call carries the internal key and the caller's correlation id. */
+    @Bean
+    public RequestInterceptor internalCallInterceptor() {
+        return template -> {
+            template.header(SecurityConstants.HEADER_INTERNAL_API_KEY, internalApiKey);
+            String correlationId = MDC.get(SecurityConstants.MDC_CORRELATION_ID);
+            if (correlationId != null) {
+                template.header(SecurityConstants.HEADER_CORRELATION_ID, correlationId);
+            }
+        };
+    }
+
+    @Bean
+    public Request.Options requestOptions() {
+        return new Request.Options(2, TimeUnit.SECONDS, 5, TimeUnit.SECONDS, true);
+    }
+
+    /** 3 attempts, 500ms backing off to 2s. Only network/5xx failures reach the retryer. */
+    @Bean
+    public Retryer retryer() {
+        return new Retryer.Default(500, 2000, 3);
+    }
+}

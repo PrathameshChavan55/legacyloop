@@ -1,0 +1,42 @@
+package com.legacyloop.core.repository;
+
+import com.legacyloop.common.enums.ApplicationStatus;
+import com.legacyloop.core.entity.Application;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.Optional;
+
+@Repository
+public interface ApplicationRepository extends JpaRepository<Application, Long> {
+
+    boolean existsByJobIdAndStudentUserId(Long jobId, Long studentUserId);
+
+    @EntityGraph(attributePaths = {"job", "job.company", "analysis"})
+    Optional<Application> findDetailedById(Long id);
+
+    @EntityGraph(attributePaths = {"job", "job.company", "analysis"})
+    Page<Application> findByStudentUserIdOrderByAppliedAtDesc(Long studentUserId, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"analysis", "resume"})
+    Page<Application> findByJobIdOrderByAppliedAtDesc(Long jobId, Pageable pageable);
+
+    @Query("""
+            select a from Application a
+            join fetch a.job j
+            where j.postedByUserId = :ownerId
+            order by a.appliedAt desc
+            """)
+    Page<Application> findForJobOwner(@Param("ownerId") Long ownerId, Pageable pageable);
+
+    long countByStatus(ApplicationStatus status);
+
+    @Query("select a.status, count(a) from Application a group by a.status")
+    List<Object[]> countGroupedByStatus();
+}

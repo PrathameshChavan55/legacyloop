@@ -1,0 +1,31 @@
+package com.legacyloop.core.client;
+
+import com.legacyloop.common.dto.ApiResponse;
+import com.legacyloop.common.dto.UserSummaryDto;
+import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Resolved through Eureka - the URL is never hardcoded. Retries transient 5xx (Spring
+ * Retry, configured in FeignConfig) and degrades through the fallback factory rather than
+ * failing the caller's request.
+ */
+@FeignClient(name = "auth-service",
+        contextId = "authServiceClient",
+        path = "/internal/v1/users",
+        configuration = FeignConfig.class,
+        fallbackFactory = AuthServiceClientFallback.class)
+public interface AuthServiceClient {
+
+    @GetMapping("/{userId}")
+    ApiResponse<UserSummaryDto> getUser(@PathVariable("userId") Long userId);
+
+    @PostMapping("/bulk")
+    ApiResponse<List<UserSummaryDto>> getUsers(@RequestBody Map<String, List<Long>> body);
+}

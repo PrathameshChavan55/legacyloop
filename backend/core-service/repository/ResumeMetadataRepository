@@ -1,0 +1,23 @@
+package com.legacyloop.core.repository;
+
+import com.legacyloop.core.entity.ResumeMetadata;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.Optional;
+
+@Repository
+public interface ResumeMetadataRepository extends JpaRepository<ResumeMetadata, Long> {
+
+    List<ResumeMetadata> findByUserIdOrderByCreatedAtDesc(Long userId);
+
+    Optional<ResumeMetadata> findByUserIdAndPrimaryResumeTrue(Long userId);
+
+    @Modifying
+    @Query("update ResumeMetadata r set r.primaryResume = false where r.userId = :userId")
+    void clearPrimaryFor(@Param("userId") Long userId);
+}
