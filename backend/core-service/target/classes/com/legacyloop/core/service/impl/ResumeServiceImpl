@@ -1,0 +1,140 @@
+package com.legacyloop.core.service.impl;
+
+import com.legacyloop.common.constant.AppConstants;
+import com.legacyloop.common.exception.ErrorCode;
+import com.legacyloop.common.exception.FileUploadException;
+import com.legacyloop.common.exception.ForbiddenException;
+import com.legacyloop.common.exception.ResourceNotFoundException;
+import com.legacyloop.common.security.SecurityContextUtil;
+import com.legacyloop.core.constant.CoreConstants;
+import com.legacyloop.core.dto.response.ResumeResponse;
+import com.legacyloop.core.entity.ResumeMetadata;
+import com.legacyloop.core.entity.StudentProfile;
+import com.legacyloop.core.mapper.CoreMapper;
+import com.legacyloop.core.repository.ResumeMetadataRepository;
+import com.legacyloop.core.repository.StudentProfileRepository;
+import com.legacyloop.core.service.ResumeService;
+import com.legacyloop.core.service.StorageService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.util.Arrays;
+import java.util.List;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class ResumeServiceImpl implements ResumeService {
+
+    private final ResumeMetadataRepository resumeRepository;
+    private final StudentProfileRepository studentProfileRepository;
+    private final StorageService storageService;
+    private final ResumeParserService parserService;
+    private final CoreMapper mapper;
+
+    @Override
+    @Transactional
+    public ResumeResponse upload(MultipartFile file, boolean makePrimary) {
+        Long userId = SecurityContextUtil.requireUserId();
+        validate(file);
+
+        // Parse BEFORE storing: a PDF we cannot read should fail fast rather than leave an
+        // orphaned object in the bucket.
+        String text = parserService.extractText(file);
+        String key = storageService.upload(file, CoreConstants.RESUME_KEY_PREFIX + "/" + userId);
+
+        boolean first = resumeRepository.findByUserIdOrderByCreatedAtDesc(userId).isEmpty();
+        boolean primary = makePrimary || first;
+        if (primary) {
+            resumeRepository.clearPrimaryFor(userId);
+        }
+
+        ResumeMetadata resume = ResumeMetadata.builder()
+                .userId(userId)
+                .fileName(file.getOriginalFilename())
+                .s3Key(key)
+                .contentType(file.getContentType())
+                .sizeBytes(file.getSize())
+                .extractedText(text)
+                .primaryResume(primary)
+                .build();
+        ResumeMetadata saved = resumeRepository.save(resume);
+
+        if (primary) {
+            studentProfileRepository.findByUserId(userId).ifPresent(profile -> {
+                profile.setPrimaryResumeId(saved.getId());
+                studentProfileRepository.save(profile);
+            });
+        }
+
+        log.info("User {} uploaded resume {} ({} characters extracted)",
+                userId, saved.getId(), text.length());
+        return mapper.toResponse(saved, storageService.presignedDownloadUrl(key));
+    }
+
+    private void validate(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new FileUploadException(ErrorCode.VALIDATION_FAILED, "No file was uploaded");
+        }
+        if (file.getSize() > AppConstants.MAX_RESUME_SIZE_BYTES) {
+            throw new FileUploadException(ErrorCode.FILE_TOO_LARGE,
+                    "Resumes must be under 5 MB");
+        }
+        boolean allowed = Arrays.stream(AppConstants.ALLOWED_RESUME_TYPES)
+                .anyMatch(type -> type.equalsIgnoreCase(file.getContentType()));
+        if (!allowed) {
+            throw new FileUploadException(ErrorCode.UNSUPPORTED_FILE_TYPE,
+                    "Only PDF resumes are accepted");
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ResumeResponse> myResumes() {
+        Long userId = SecurityContextUtil.requireUserId();
+        return resumeRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
+                .map(resume -> mapper.toResponse(resume,
+                        storageService.presignedDownloadUrl(resume.getS3Key())))
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public ResumeResponse setPrimary(Long resumeId) {
+        Long userId = SecurityContextUtil.requireUserId();
+        ResumeMetadata resume = load(resumeId, userId);
+
+        resumeRepository.clearPrimaryFor(userId);
+        resume.setPrimaryResume(true);
+        ResumeMetadata saved = resumeRepository.save(resume);
+
+        StudentProfile profile = studentProfileRepository.findByUserId(userId).orElse(null);
+        if (profile != null) {
+            profile.setPrimaryResumeId(saved.getId());
+            studentProfileRepository.save(profile);
+        }
+        return mapper.toResponse(saved, storageService.presignedDownloadUrl(saved.getS3Key()));
+    }
+
+    @Override
+    @Transactional
+    public void delete(Long resumeId) {
+        Long userId = SecurityContextUtil.requireUserId();
+        ResumeMetadata resume = load(resumeId, userId);
+        resumeRepository.delete(resume);
+        storageService.delete(resume.getS3Key());
+        log.info("User {} deleted resume {}", userId, resumeId);
+    }
+
+    private ResumeMetadata load(Long resumeId, Long userId) {
+        ResumeMetadata resume = resumeRepository.findById(resumeId)
+                .orElseThrow(() -> new ResourceNotFoundException("Resume", "id", resumeId));
+        if (!resume.getUserId().equals(userId)) {
+            throw new ForbiddenException(ErrorCode.NOT_RESOURCE_OWNER);
+        }
+        return resume;
+    }
+}

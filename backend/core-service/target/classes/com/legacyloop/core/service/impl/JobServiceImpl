@@ -1,0 +1,213 @@
+package com.legacyloop.core.service.impl;
+
+import com.legacyloop.common.constant.RabbitConstants;
+import com.legacyloop.common.dto.PageResponse;
+import com.legacyloop.common.dto.UserSummaryDto;
+import com.legacyloop.common.enums.JobStatus;
+import com.legacyloop.common.enums.Role;
+import com.legacyloop.common.exception.BusinessException;
+import com.legacyloop.common.exception.ErrorCode;
+import com.legacyloop.common.exception.ForbiddenException;
+import com.legacyloop.common.exception.ResourceNotFoundException;
+import com.legacyloop.common.security.AuthenticatedUser;
+import com.legacyloop.common.security.SecurityContextUtil;
+import com.legacyloop.core.client.UserLookupService;
+import com.legacyloop.core.dto.request.CreateJobRequest;
+import com.legacyloop.core.dto.request.UpdateJobRequest;
+import com.legacyloop.core.dto.response.JobResponse;
+import com.legacyloop.core.entity.Company;
+import com.legacyloop.core.entity.Job;
+import com.legacyloop.core.mapper.CoreMapper;
+import com.legacyloop.core.publisher.CoreEventPublisher;
+import com.legacyloop.core.repository.ApplicationRepository;
+import com.legacyloop.core.repository.CompanyRepository;
+import com.legacyloop.core.repository.JobRepository;
+import com.legacyloop.core.service.JobService;
+import com.legacyloop.core.specification.JobSpecifications;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class JobServiceImpl implements JobService {
+
+    private final JobRepository jobRepository;
+    private final CompanyRepository companyRepository;
+    private final ApplicationRepository applicationRepository;
+    private final UserLookupService userLookupService;
+    private final CoreEventPublisher eventPublisher;
+    private final CoreMapper mapper;
+
+    @Override
+    @Transactional
+    public JobResponse create(CreateJobRequest request) {
+        AuthenticatedUser user = SecurityContextUtil.requireUser();
+
+        Company company = companyRepository.findById(request.companyId())
+                .orElseThrow(() -> new ResourceNotFoundException("Company", "id", request.companyId()));
+
+        if (request.salaryMin() != null && request.salaryMax() != null
+                && request.salaryMin().compareTo(request.salaryMax()) > 0) {
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED,
+                    "Minimum salary cannot exceed the maximum");
+        }
+
+        Job job = Job.builder()
+                .title(request.title().trim())
+                .company(company)
+                .postedByUserId(user.userId())
+                .description(request.description())
+                .requiredSkills(request.requiredSkills())
+                .location(request.location())
+                .employmentType(request.employmentType() == null ? "FULL_TIME" : request.employmentType())
+                .salaryMin(request.salaryMin())
+                .salaryMax(request.salaryMax())
+                .experienceYears(request.experienceYears())
+                .referralSlots(request.referralSlots() == null ? 0 : request.referralSlots())
+                .referralSlotsUsed(0)
+                .status(JobStatus.OPEN)
+                .applicationDeadline(request.applicationDeadline())
+                .applicationCount(0)
+                .build();
+
+        Job saved = jobRepository.save(job);
+        log.info("User {} posted job {} at {}", user.userId(), saved.getId(), company.getName());
+
+        eventPublisher.publishJobPosted(saved);
+        return hydrate(mapper.toResponse(saved, false));
+    }
+
+    @Override
+    @Transactional
+    public JobResponse update(Long jobId, UpdateJobRequest request) {
+        Job job = loadJob(jobId);
+        assertCanManage(job);
+
+        if (StringUtils.hasText(request.title())) {
+            job.setTitle(request.title().trim());
+        }
+        if (StringUtils.hasText(request.description())) {
+            job.setDescription(request.description());
+        }
+        if (StringUtils.hasText(request.requiredSkills())) {
+            job.setRequiredSkills(request.requiredSkills());
+        }
+        if (request.location() != null) {
+            job.setLocation(request.location());
+        }
+        if (request.salaryMin() != null) {
+            job.setSalaryMin(request.salaryMin());
+        }
+        if (request.salaryMax() != null) {
+            job.setSalaryMax(request.salaryMax());
+        }
+        if (request.referralSlots() != null) {
+            if (request.referralSlots() < job.getReferralSlotsUsed()) {
+                throw new BusinessException(ErrorCode.VALIDATION_FAILED,
+                        "You have already granted %d referrals; slots cannot go below that"
+                                .formatted(job.getReferralSlotsUsed()));
+            }
+            job.setReferralSlots(request.referralSlots());
+        }
+        if (request.applicationDeadline() != null) {
+            job.setApplicationDeadline(request.applicationDeadline());
+        }
+        if (StringUtils.hasText(request.status())) {
+            job.setStatus(JobStatus.valueOf(request.status()));
+        }
+
+        return hydrate(mapper.toResponse(jobRepository.save(job), false));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public JobResponse getById(Long jobId) {
+        Job job = jobRepository.findWithCompanyById(jobId)
+                .orElseThrow(() -> new ResourceNotFoundException("Job", "id", jobId));
+
+        boolean applied = SecurityContextUtil.currentUser()
+                .map(user -> applicationRepository.existsByJobIdAndStudentUserId(jobId, user.userId()))
+                .orElse(false);
+
+        return hydrate(mapper.toResponse(job, applied));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResponse<JobResponse> search(String keyword, String skills, String location,
+                                            String employmentType, Long companyId,
+                                            BigDecimal minSalary, String status, Pageable pageable) {
+        JobStatus jobStatus = StringUtils.hasText(status) ? JobStatus.valueOf(status) : JobStatus.OPEN;
+
+        Page<Job> page = jobRepository.findAll(
+                JobSpecifications.withFilters(keyword, skills, location, employmentType,
+                        companyId, minSalary, jobStatus),
+                pageable);
+
+        return hydratePage(page);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResponse<JobResponse> myPostings(Pageable pageable) {
+        Long userId = SecurityContextUtil.requireUserId();
+        return hydratePage(jobRepository.findByPostedByUserId(userId, pageable));
+    }
+
+    @Override
+    @Transactional
+    public void close(Long jobId) {
+        Job job = loadJob(jobId);
+        assertCanManage(job);
+        job.setStatus(JobStatus.CLOSED);
+        jobRepository.save(job);
+        log.info("Job {} closed", jobId);
+    }
+
+    // ---------- helpers ----------
+
+    private Job loadJob(Long jobId) {
+        return jobRepository.findWithCompanyById(jobId)
+                .orElseThrow(() -> new ResourceNotFoundException("Job", "id", jobId));
+    }
+
+    /** The poster, a placement head or an admin. Nobody else. */
+    private void assertCanManage(Job job) {
+        AuthenticatedUser user = SecurityContextUtil.requireUser();
+        boolean privileged = user.isStaff();
+        if (!privileged && !user.isOwner(job.getPostedByUserId())) {
+            throw new ForbiddenException(ErrorCode.NOT_RESOURCE_OWNER,
+                    "You can only manage jobs you posted");
+        }
+    }
+
+    private JobResponse hydrate(JobResponse response) {
+        return response.withPoster(userLookupService.getUser(response.postedByUserId()));
+    }
+
+    /** One bulk lookup for the whole page instead of one call per row. */
+    private PageResponse<JobResponse> hydratePage(Page<Job> page) {
+        List<JobResponse> responses = page.getContent().stream()
+                .map(job -> mapper.toResponse(job, false))
+                .toList();
+
+        Map<Long, UserSummaryDto> posters = userLookupService.getUsers(
+                responses.stream().map(JobResponse::postedByUserId).toList());
+
+        List<JobResponse> hydrated = responses.stream()
+                .map(response -> response.withPoster(posters.get(response.postedByUserId())))
+                .toList();
+
+        return PageResponse.of(hydrated, page.getNumber(), page.getSize(), page.getTotalElements());
+    }
+}
