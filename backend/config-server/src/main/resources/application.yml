@@ -1,0 +1,36 @@
+server:
+  port: 8888
+  shutdown: graceful
+
+spring:
+  application:
+    name: config-server
+  profiles:
+    active: native
+  cloud:
+    config:
+      server:
+        native:
+          # Local run (from the repo root or the IDE) and container run resolve differently,
+          # so both locations are listed; the first one that exists wins.
+          search-locations: file:./config-repo,file:../config-repo,file:/app/config-repo
+        # Fail fast rather than silently serving an empty property source.
+        fail-on-composite-error: true
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+    register-with-eureka: true
+    fetch-registry: true
+  instance:
+    prefer-ip-address: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,refresh
+  endpoint:
+    health:
+      show-details: always

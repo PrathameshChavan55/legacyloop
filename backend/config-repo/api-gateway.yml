@@ -1,0 +1,166 @@
+# Routes. Every id maps to a Eureka service name via lb:// - no hardcoded URLs anywhere.
+
+spring:
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: false          # explicit routes only; auto-locator exposes internals
+      httpclient:
+        connect-timeout: 2000
+        response-timeout: 15s
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_UNIQUE
+
+      routes:
+        # ---------- auth: tight IP-based limit on the credential endpoints ----------
+        - id: auth-login
+          uri: lb://auth-service
+          predicates:
+            - Path=/api/v1/auth/login,/api/v1/auth/register,/api/v1/auth/forgot-password,/api/v1/auth/resend-otp
+          filters:
+            # - name: RequestRateLimiter
+            #   args:
+            #     key-resolver: "#{@ipKeyResolver}"
+            #     redis-rate-limiter.replenishRate: 5
+            #     redis-rate-limiter.burstCapacity: 10
+            #     redis-rate-limiter.requestedTokens: 1
+            - name: CircuitBreaker
+              args:
+                name: authCircuitBreaker
+                fallbackUri: forward:/fallback/auth
+
+        - id: auth-service
+          uri: lb://auth-service
+          predicates:
+            - Path=/api/v1/auth/**,/api/v1/users/**,/api/v1/admin/**,/api/v1/institution/**,/api/v1/directory/**
+          filters:
+            # - name: RequestRateLimiter
+            #   args:
+            #     key-resolver: "#{@userKeyResolver}"
+            #     redis-rate-limiter.replenishRate: 100
+            #     redis-rate-limiter.burstCapacity: 200
+            - name: CircuitBreaker
+              args:
+                name: authCircuitBreaker
+                fallbackUri: forward:/fallback/auth
+
+        # ---------- core ----------
+        - id: core-service
+          uri: lb://core-service
+          predicates:
+            - Path=/api/v1/jobs/**,/api/v1/companies/**,/api/v1/applications/**,/api/v1/referrals/**,/api/v1/resumes/**,/api/v1/profiles/**,/api/v1/mentorship/**,/api/v1/notes/**,/api/v1/interview-questions/**,/api/v1/schedules/**,/api/v1/drives/**,/api/v1/analytics/**,/api/v1/reports/**,/api/v1/ai/**
+          filters:
+            # - name: RequestRateLimiter
+            #   args:
+            #     key-resolver: "#{@userKeyResolver}"
+            #     redis-rate-limiter.replenishRate: 100
+            #     redis-rate-limiter.burstCapacity: 200
+            - name: CircuitBreaker
+              args:
+                name: coreCircuitBreaker
+                fallbackUri: forward:/fallback/core
+
+        # ---------- feed ----------
+        - id: feed-service
+          uri: lb://feed-service
+          predicates:
+            - Path=/api/v1/posts/**,/api/v1/comments/**,/api/v1/reactions/**,/api/v1/announcements/**,/api/v1/notifications/**,/api/v1/chat/**,/api/v1/connections/**
+          filters:
+            # - name: RequestRateLimiter
+            #   args:
+            #     key-resolver: "#{@userKeyResolver}"
+            #     redis-rate-limiter.replenishRate: 150
+            #     redis-rate-limiter.burstCapacity: 300
+            - name: CircuitBreaker
+              args:
+                name: feedCircuitBreaker
+                fallbackUri: forward:/fallback/feed
+
+        # WebSocket/STOMP - no rate limiter, no circuit breaker on a long-lived socket
+        - id: feed-websocket
+          uri: lb:ws://feed-service
+          predicates:
+            - Path=/ws/**
+
+        # ---------- payment ----------
+        - id: payment-webhook
+          uri: lb://payment-service
+          predicates:
+            - Path=/api/v1/payments/webhook/**
+          # No rate limiter: Razorpay retries webhooks and must never be throttled.
+
+        - id: payment-service
+          uri: lb://payment-service
+          predicates:
+            - Path=/api/v1/payments/**,/api/v1/plans/**,/api/v1/subscriptions/**,/api/v1/invoices/**
+          filters:
+            # - name: RequestRateLimiter
+            #   args:
+            #     key-resolver: "#{@userKeyResolver}"
+            #     redis-rate-limiter.replenishRate: 50
+            #     redis-rate-limiter.burstCapacity: 100
+            - name: CircuitBreaker
+              args:
+                name: paymentCircuitBreaker
+                fallbackUri: forward:/fallback/payment
+
+        # ---------- aggregated swagger ----------
+        - id: auth-docs
+          uri: lb://auth-service
+          predicates:
+            - Path=/auth-service/v3/api-docs
+          filters:
+            - RewritePath=/auth-service/v3/api-docs,/v3/api-docs
+        - id: core-docs
+          uri: lb://core-service
+          predicates:
+            - Path=/core-service/v3/api-docs
+          filters:
+            - RewritePath=/core-service/v3/api-docs,/v3/api-docs
+        - id: feed-docs
+          uri: lb://feed-service
+          predicates:
+            - Path=/feed-service/v3/api-docs
+          filters:
+            - RewritePath=/feed-service/v3/api-docs,/v3/api-docs
+        - id: payment-docs
+          uri: lb://payment-service
+          predicates:
+            - Path=/payment-service/v3/api-docs
+          filters:
+            - RewritePath=/payment-service/v3/api-docs,/v3/api-docs
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowSize: 20
+        failureRateThreshold: 50
+        waitDurationInOpenState: 20s
+        permittedNumberOfCallsInHalfOpenState: 5
+        registerHealthIndicator: true
+    instances:
+      authCircuitBreaker:
+        baseConfig: default
+      coreCircuitBreaker:
+        baseConfig: default
+      feedCircuitBreaker:
+        baseConfig: default
+      paymentCircuitBreaker:
+        baseConfig: default
+  timelimiter:
+    configs:
+      default:
+        timeoutDuration: 15s
+
+legacyloop:
+  jwt:
+    secret: ${JWT_SECRET}
+    issuer: ${JWT_ISSUER:legacyloop}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,gateway

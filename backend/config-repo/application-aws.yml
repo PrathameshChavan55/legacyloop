@@ -1,0 +1,65 @@
+# =============================================================================
+# application-aws.yml — shared AWS managed infrastructure profile
+#
+# Active when SPRING_PROFILES_ACTIVE=aws
+# Replaces local Docker containers with:
+#   - Amazon MQ (RabbitMQ)  → AMQPS on port 5671 (TLS mandatory)
+#   - Amazon ElastiCache     → Redis TLS on port 6379 with AUTH token
+#
+# All connection details come from environment variables; no secrets are
+# committed here. Provide them via AWS Secrets Manager, Parameter Store,
+# or a secure .env file on the EC2 instance.
+# =============================================================================
+
+spring:
+
+  # ---------- Amazon MQ (RabbitMQ engine) ----------
+  # Amazon MQ requires TLS (AMQPS). Use port 5671, NOT 5672.
+  # AMAZONMQ_HOST = b-xxxx.mq.<region>.amazonaws.com  (no amqps:// prefix)
+  rabbitmq:
+    host: ${AMAZONMQ_HOST}
+    port: ${AMAZONMQ_PORT:5671}
+    username: ${RABBITMQ_USER}
+    password: ${RABBITMQ_PASSWORD}
+    virtual-host: ${RABBITMQ_VHOST:/}
+    ssl:
+      enabled: true                 # mandatory for Amazon MQ
+      validate-server-certificate: true
+    connection-timeout: 10000
+    listener:
+      simple:
+        acknowledge-mode: manual
+        retry:
+          enabled: true
+          initial-interval: 2s
+          max-attempts: 5
+          multiplier: 2
+        default-requeue-rejected: false
+
+  # ---------- Amazon ElastiCache for Redis (in-transit encryption) ----------
+  # ELASTICACHE_HOST = <cluster>.cache.amazonaws.com
+  # ELASTICACHE_AUTH_TOKEN = the AUTH token configured in ElastiCache
+  # ElastiCache TLS uses rediss:// (handled by the ssl block below)
+  data:
+    redis:
+      host: ${ELASTICACHE_HOST}
+      port: ${ELASTICACHE_PORT:6379}
+      password: ${ELASTICACHE_AUTH_TOKEN}   # ElastiCache AUTH token maps to password
+      timeout: 3s
+      ssl:
+        enabled: true                        # mandatory when in-transit encryption is on
+
+logging:
+  level:
+    root: WARN
+    com.legacyloop: INFO
+    org.hibernate.SQL: WARN
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: never

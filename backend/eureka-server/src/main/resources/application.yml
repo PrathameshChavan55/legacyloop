@@ -1,0 +1,37 @@
+server:
+  port: 8761
+  shutdown: graceful
+
+spring:
+  application:
+    name: eureka-server
+
+eureka:
+  instance:
+    hostname: ${EUREKA_HOSTNAME:localhost}
+    prefer-ip-address: false
+  client:
+    # The registry does not register with itself and does not fetch a registry.
+    register-with-eureka: false
+    fetch-registry: false
+    service-url:
+      defaultZone: http://${eureka.instance.hostname}:${server.port}/eureka/
+  server:
+    # Self-preservation off in dev, otherwise dead services linger in the dashboard
+    # for minutes and the demo shows stale instances.
+    enable-self-preservation: ${EUREKA_SELF_PRESERVATION:false}
+    eviction-interval-timer-in-ms: 15000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.netflix.eureka: WARN
+    com.netflix.discovery: WARN
