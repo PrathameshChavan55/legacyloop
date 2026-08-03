@@ -1,0 +1,19 @@
+package com.legacyloop.core.repository;
+
+import com.legacyloop.core.entity.StudentProfile;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.Optional;
+
+@Repository
+public interface StudentProfileRepository extends JpaRepository<StudentProfile, Long> {
+
+    Optional<StudentProfile> findByUserId(Long userId);
+
+    boolean existsByUserId(Long userId);
+
+    Page<StudentProfile> findByBatchId(String batchId, Pageable pageable);
+}
