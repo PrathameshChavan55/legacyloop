@@ -1,0 +1,56 @@
+spring:
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${CORE_DB_NAME:legacyloop_core}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=utf8
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:cdac}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      pool-name: core-hikari
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        jdbc:
+          batch_size: 25
+        default_batch_fetch_size: 25
+        order_inserts: true
+        order_updates: true
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 10MB
+  rabbitmq:
+    listener:
+      simple:
+        # The AI call can take 45s; low concurrency keeps memory predictable.
+        concurrency: 1
+        max-concurrency: 3
+        prefetch: 1
+
+legacyloop:
+  storage:
+    # true = write to ./uploads so the pipeline demos without AWS credentials
+    local: ${STORAGE_LOCAL:true}
+    local-dir: ${STORAGE_LOCAL_DIR:./uploads}
+    bucket: ${AWS_S3_BUCKET:legacyloop-media}
+    region: ${AWS_REGION:ap-south-1}
+    access-key: ${AWS_ACCESS_KEY_ID:}
+    secret-key: ${AWS_SECRET_ACCESS_KEY:}
+    presign-minutes: ${AWS_S3_PRESIGN_MINUTES:15}
+  ai:
+    # GEMINI | OLLAMA | STUB. STUB needs no key and no internet - use it for the demo dry run.
+    provider: ${AI_PROVIDER:STUB}
+    gemini:
+      api-key: ${GEMINI_API_KEY:}
+      model: ${GEMINI_MODEL:gemini-2.0-flash}
+      base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com}
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      model: ${OLLAMA_MODEL:llama3}
