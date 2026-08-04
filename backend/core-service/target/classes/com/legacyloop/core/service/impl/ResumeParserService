@@ -1,0 +1,74 @@
+package com.legacyloop.core.service.impl;
+
+import com.legacyloop.common.exception.BusinessException;
+import com.legacyloop.common.exception.ErrorCode;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.text.PDFTextStripper;
+import org.apache.tika.Tika;
+import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+
+/**
+ * PDFBox first (it handles CV layouts better), Tika as the fallback for anything else.
+ * Text is extracted once, at upload, so the AI worker never re-downloads the file.
+ */
+@Slf4j
+@Service
+public class ResumeParserService {
+
+    private static final int MIN_USEFUL_CHARS = 100;
+    private final Tika tika = new Tika();
+
+    public String extractText(MultipartFile file) {
+        try {
+            byte[] bytes = file.getBytes();
+            String text = extractWithPdfBox(bytes);
+
+            if (text == null || text.strip().length() < MIN_USEFUL_CHARS) {
+                log.debug("PDFBox produced too little text, falling back to Tika");
+                text = tika.parseToString(new java.io.ByteArrayInputStream(bytes));
+            }
+
+            if (text == null || text.strip().length() < MIN_USEFUL_CHARS) {
+                // Almost always a scanned/image-only PDF. OCR is out of scope; say so clearly.
+                throw new BusinessException(ErrorCode.RESUME_PARSE_FAILED,
+                        "No readable text found. This looks like a scanned or image-based PDF - "
+                                + "please upload a text-based one.");
+            }
+            return normalise(text);
+
+        } catch (BusinessException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            log.error("Resume parsing failed for {}", file.getOriginalFilename(), ex);
+            throw new BusinessException(ErrorCode.RESUME_PARSE_FAILED,
+                    "Could not read this file.", null, ex);
+        }
+    }
+
+    private String extractWithPdfBox(byte[] bytes) {
+        try (PDDocument document = Loader.loadPDF(bytes)) {
+            if (document.isEncrypted()) {
+                log.debug("Encrypted PDF, skipping PDFBox");
+                return null;
+            }
+            PDFTextStripper stripper = new PDFTextStripper();
+            stripper.setSortByPosition(true);
+            return stripper.getText(document);
+        } catch (IOException ex) {
+            log.debug("PDFBox could not read the document: {}", ex.getMessage());
+            return null;
+        }
+    }
+
+    /** Collapses the whitespace soup that PDF extraction produces. */
+    private String normalise(String text) {
+        return text.replaceAll("[ \\t]+", " ")
+                .replaceAll("(\\r?\\n){3,}", "\n\n")
+                .strip();
+    }
+}
