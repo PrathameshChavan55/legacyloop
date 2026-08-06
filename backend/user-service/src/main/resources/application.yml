@@ -1,0 +1,70 @@
+spring:
+  application:
+    name: user-service
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:legacyloop_user}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: ${DB_USER:root}
+    password: ${DB_PASSWORD:root}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+        # Group inserts and updates into batches rather than one round trip each.
+        jdbc.batch_size: 25
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USER:legacyloop34@gmail.com}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+
+server:
+  port: ${SERVER_PORT:8081}
+
+legacyloop:
+  app-url: ${APP_URL:http://localhost:5173}
+  jwt:
+    # Override in every real environment. Must be at least 32 characters for HS256.
+    secret: ${JWT_SECRET:change-me-in-production-legacyloop-lite-secret-key}
+    access-token-seconds: ${JWT_ACCESS_SECONDS:3600}
+    refresh-token-seconds: ${JWT_REFRESH_SECONDS:604800}
+  otp:
+    validity-minutes: ${OTP_VALIDITY_MINUTES:10}
+  mail:
+    enabled: ${MAIL_ENABLED:false}
+    from: ${MAIL_FROM:legacyloop34@gmail.com}
+  razorpay:
+    # Leave blank to run checkout in stub mode — the flow works end to end without a gateway.
+    key-id: ${RAZORPAY_KEY_ID:}
+    key-secret: ${RAZORPAY_KEY_SECRET:}
+  seed-demo-data: ${SEED_DEMO_DATA:true}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  level:
+    com.legacyloop: ${LOG_LEVEL:INFO}
+  file:
+    name: ${LOG_FILE:logs/user-service.log}

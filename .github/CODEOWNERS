@@ -1,0 +1,14 @@
+# Whoever is listed here is requested for review automatically. Replace the handles with real
+# GitHub usernames.
+
+/backend/common/          @lead
+/backend/api-gateway/     @lead
+/docker-compose.yml       @lead
+/.github/                 @lead
+/frontend/src/lib/http.js @lead
+/frontend/src/components/ @lead
+
+/backend/user-service/src/main/java/com/legacyloop/user/       @member1 @member2 @member6
+/backend/career-service/src/main/java/com/legacyloop/career/   @member3 @member4
+/backend/social-service/src/main/java/com/legacyloop/social/   @member5 @member6
+/frontend/src/pages/                                          @member1 @member2 @member3 @member4 @member5 @member6

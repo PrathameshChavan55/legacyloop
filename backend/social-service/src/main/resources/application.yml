@@ -1,0 +1,36 @@
+spring:
+  application:
+    name: social-service
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://localhost:27017/legacyloop_social}
+      auto-index-creation: true
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+
+server:
+  port: ${SERVER_PORT:8083}
+
+legacyloop:
+  jwt:
+    secret: ${JWT_SECRET:change-me-in-production-legacyloop-lite-secret-key}
+  user-service-url: ${USER_SERVICE_URL:http://localhost:8081}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  level:
+    com.legacyloop: ${LOG_LEVEL:INFO}
+  file:
+    name: ${LOG_FILE:logs/social-service.log}

@@ -1,0 +1,142 @@
+# The whole system: three databases' worth of infrastructure, three services and the web app.
+#
+# The original compose file also started Eureka, a config server, an API gateway, Redis, Zipkin,
+# Prometheus, Grafana and an ELK stack — fourteen containers to run five services. None of those
+# nine are needed to demonstrate the application, so none of them are here. Health checks and
+# depends_on give the same startup ordering that service discovery was doing.
+
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-root}
+      # Both services' schemas are created on first connect by the JDBC URL.
+      MYSQL_DATABASE: legacyloop_user
+    ports:
+      - '${MYSQL_PORT:-3307}:3306'
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost', '-p${DB_PASSWORD:-root}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  mongodb:
+    image: mongo:7
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ['CMD', 'mongosh', '--eval', "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    ports:
+      - '5672:5672'
+      - '15672:15672'   # management UI, handy for showing the queue during a demo
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  user-service:
+    build:
+      context: ./backend
+      dockerfile: user-service/Dockerfile
+    environment:
+      DB_HOST: mysql
+      DB_NAME: legacyloop_user
+      DB_USER: root
+      DB_PASSWORD: ${DB_PASSWORD:-root}
+      RABBITMQ_HOST: rabbitmq
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-legacyloop-lite-secret-key}
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      MAIL_ENABLED: ${MAIL_ENABLED:-true}
+      MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USER: ${MAIL_USER:-legacyloop34@gmail.com}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-legacyloop34@gmail.com}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
+    ports:
+      - '8081:8081'
+    depends_on:
+      mysql: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  career-service:
+    build:
+      context: ./backend
+      dockerfile: career-service/Dockerfile
+    environment:
+      DB_HOST: mysql
+      DB_NAME: legacyloop_career
+      DB_USER: root
+      DB_PASSWORD: ${DB_PASSWORD:-root}
+      RABBITMQ_HOST: rabbitmq
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-legacyloop-lite-secret-key}
+      USER_SERVICE_URL: http://user-service:8081
+      STORAGE_DIR: /data/resumes
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
+    ports:
+      - '8082:8082'
+    volumes:
+      - resume-data:/data/resumes
+    depends_on:
+      mysql: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+      user-service: { condition: service_started }
+
+  social-service:
+    build:
+      context: ./backend
+      dockerfile: social-service/Dockerfile
+    environment:
+      MONGODB_URI: mongodb://mongodb:27017/legacyloop_social
+      RABBITMQ_HOST: rabbitmq
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-legacyloop-lite-secret-key}
+      USER_SERVICE_URL: http://user-service:8081
+    ports:
+      - '8083:8083'
+    depends_on:
+      mongodb: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+      user-service: { condition: service_started }
+
+  api-gateway:
+    build:
+      context: ./backend
+      dockerfile: api-gateway/Dockerfile
+    environment:
+      USER_SERVICE_URL: http://user-service:8081
+      CAREER_SERVICE_URL: http://career-service:8082
+      SOCIAL_SERVICE_URL: http://social-service:8083
+      SOCIAL_SERVICE_WS_URL: ws://social-service:8083
+    ports:
+      - '8080:8080'
+    depends_on:
+      user-service: { condition: service_started }
+      career-service: { condition: service_started }
+      social-service: { condition: service_started }
+
+  frontend:
+    build: ./frontend
+    ports:
+      - '3000:80'
+    depends_on:
+      - api-gateway
+
+volumes:
+  mysql-data:
+  mongo-data:
+  resume-data:

@@ -1,0 +1,52 @@
+spring:
+  application:
+    name: career-service
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:legacyloop_career}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: ${DB_USER:root}
+    password: ${DB_PASSWORD:root}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
+
+server:
+  port: ${SERVER_PORT:8082}
+
+legacyloop:
+  # The same secret user-service signs with; this service only verifies.
+  jwt:
+    secret: ${JWT_SECRET:change-me-in-production-legacyloop-lite-secret-key}
+  user-service-url: ${USER_SERVICE_URL:http://localhost:8081}
+  storage-dir: ${STORAGE_DIR:./data/resumes}
+  max-resume-bytes: ${MAX_RESUME_BYTES:5242880}
+  gemini:
+    # Leave blank to use the built-in rule-based analysis instead of calling a model.
+    api-key: ${GEMINI_API_KEY:}
+    model: ${GEMINI_MODEL:gemini-2.5-flash}
+  seed-demo-data: ${SEED_DEMO_DATA:true}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  level:
+    com.legacyloop: ${LOG_LEVEL:INFO}
+  file:
+    name: ${LOG_FILE:logs/career-service.log}
