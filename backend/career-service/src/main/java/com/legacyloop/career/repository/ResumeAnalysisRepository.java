@@ -14,4 +14,3 @@ public interface ResumeAnalysisRepository extends JpaRepository<ResumeAnalysis, 
 
     Page<ResumeAnalysis> findByUserIdOrderByIdDesc(Long userId, Pageable pageable);
 }
-

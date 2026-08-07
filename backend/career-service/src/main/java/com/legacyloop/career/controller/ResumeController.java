@@ -94,4 +94,3 @@ public class ResumeController {
         return ApiResponse.message("Resume deleted");
     }
 }
-

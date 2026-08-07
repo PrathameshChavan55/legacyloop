@@ -15,4 +15,3 @@ public interface ResumeRepository extends JpaRepository<Resume, Long> {
 
     long countByOwnerUserId(Long ownerUserId);
 }
-

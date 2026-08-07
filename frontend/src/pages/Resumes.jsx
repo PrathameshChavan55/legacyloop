@@ -165,4 +165,3 @@ const FindingList = ({ title, items, tone }) =>
       </ul>
     </div>
   ) : null
-

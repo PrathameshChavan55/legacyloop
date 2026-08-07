@@ -71,4 +71,3 @@ public final class AiDtos {
                                             List<String> improvements, String modelAnswer) {
     }
 }
-

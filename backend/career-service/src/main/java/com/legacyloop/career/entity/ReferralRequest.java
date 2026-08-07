@@ -66,4 +66,3 @@ public class ReferralRequest {
     @Column(name = "responded_at")
     private Instant respondedAt;
 }
-

@@ -1,19 +1,62 @@
-import Placeholder from '../components/Placeholder'
+import { useState } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import AuthShell from '../components/AuthShell'
+import { Button, Field, Input } from '../components/ui'
+import { api, errorMessage } from '../lib/api'
 
-/**
- * ResetPassword — owner: Member 1.
- *
- * Set a new password from the emailed token
- *
- * Build it here. Everything you need already exists:
- *   import { api } from '../lib/api'                  the endpoints
- *   import { useAuth } from '../lib/auth'              who is signed in
- *   import { useToast } from '../lib/toast'            success and error messages
- *   import { Card, Button, Spinner } from '../components/ui'
- *   import { useQuery, useMutation } from '@tanstack/react-query'
- *
- * Handle four states: loading, error, empty, data. See docs/PATTERNS.md.
- */
 export default function ResetPassword() {
-  return <Placeholder title="ResetPassword" owner="Member 1" notes="Set a new password from the emailed token" />
+  const [params] = useSearchParams()
+  const navigate = useNavigate()
+
+  const [token, setToken] = useState(params.get('token') ?? '')
+  const [newPassword, setNewPassword] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const submit = async (event) => {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+      await api.auth.resetPassword({ token, newPassword })
+      navigate('/login', { replace: true })
+    } catch (failure) {
+      setError(errorMessage(failure))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <AuthShell
+      title="Choose a new password"
+      footer={<Link className="link" to="/login">Back to sign in</Link>}
+    >
+      <form onSubmit={submit}>
+        {!params.get('token') && (
+          <Field label="Reset token" hint="From the email we sent you">
+            <Input required value={token} onChange={(event) => setToken(event.target.value)} />
+          </Field>
+        )}
+
+        <Field
+          label="New password"
+          hint="At least 8 characters with upper case, lower case, a digit and a symbol"
+        >
+          <Input
+            type="password"
+            required
+            value={newPassword}
+            onChange={(event) => setNewPassword(event.target.value)}
+          />
+        </Field>
+
+        {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
+
+        <Button type="submit" loading={busy} className="w-full">
+          Change password
+        </Button>
+      </form>
+    </AuthShell>
+  )
 }

@@ -53,4 +53,3 @@ public interface JobApplicationRepository extends JpaRepository<JobApplication, 
 
     List<JobApplication> findByStatus(ApplicationStatus status);
 }
-

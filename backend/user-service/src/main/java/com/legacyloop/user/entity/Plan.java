@@ -35,10 +35,10 @@ public class Plan {
     private Long id;
 
     @Column(nullable = false, unique = true, length = 48)
-    private String code; // BASIC_MONTHLY
+    private String code;
 
     @Column(nullable = false, length = 120)
-    private String name; // Pro membership
+    private String name;
 
     @Column(length = 500)
     private String description;
@@ -76,4 +76,3 @@ public class Plan {
         return "₹" + amountRupees().stripTrailingZeros().toPlainString();
     }
 }
-

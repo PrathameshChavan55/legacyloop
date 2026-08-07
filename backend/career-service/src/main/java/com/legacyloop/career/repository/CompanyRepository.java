@@ -25,4 +25,3 @@ public interface CompanyRepository extends JpaRepository<Company, Long> {
                          @Param("active") Boolean active,
                          Pageable pageable);
 }
-

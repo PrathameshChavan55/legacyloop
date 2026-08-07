@@ -92,4 +92,3 @@ public class ResumeAnalysis {
     @Column(name = "completed_at")
     private Instant completedAt;
 }
-

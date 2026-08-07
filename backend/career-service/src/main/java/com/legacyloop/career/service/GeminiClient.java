@@ -78,4 +78,3 @@ public class GeminiClient {
         return trimmed.trim();
     }
 }
-

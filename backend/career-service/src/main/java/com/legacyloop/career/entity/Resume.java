@@ -70,4 +70,3 @@ public class Resume {
     @Column(name = "uploaded_at", updatable = false)
     private Instant uploadedAt;
 }
-

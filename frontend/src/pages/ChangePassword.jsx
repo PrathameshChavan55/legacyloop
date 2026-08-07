@@ -1,19 +1,68 @@
-import Placeholder from '../components/Placeholder'
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import AuthShell from '../components/AuthShell'
+import { Button, Field, Input } from '../components/ui'
+import { api, errorMessage } from '../lib/api'
+import { useAuth } from '../lib/auth'
 
-/**
- * ChangePassword — owner: Member 1.
- *
- * Forced when an admin issued a temporary password
- *
- * Build it here. Everything you need already exists:
- *   import { api } from '../lib/api'                  the endpoints
- *   import { useAuth } from '../lib/auth'              who is signed in
- *   import { useToast } from '../lib/toast'            success and error messages
- *   import { Card, Button, Spinner } from '../components/ui'
- *   import { useQuery, useMutation } from '@tanstack/react-query'
- *
- * Handle four states: loading, error, empty, data. See docs/PATTERNS.md.
- */
+/** Reached from the menu, or forced when an admin has issued a temporary password. */
 export default function ChangePassword() {
-  return <Placeholder title="ChangePassword" owner="Member 1" notes="Forced when an admin issued a temporary password" />
+  const navigate = useNavigate()
+  const { user, refreshUser } = useAuth()
+
+  const [form, setForm] = useState({ currentPassword: '', newPassword: '' })
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const submit = async (event) => {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+      await api.auth.changePassword(form)
+      await refreshUser()
+      navigate('/', { replace: true })
+    } catch (failure) {
+      setError(errorMessage(failure))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <AuthShell
+      title="Change your password"
+      subtitle={
+        user?.mustChangePassword
+          ? 'Your account was created with a temporary password. Choose your own to continue.'
+          : 'Changing your password signs you out everywhere else.'
+      }
+    >
+      <form onSubmit={submit}>
+        <Field label="Current password">
+          <Input
+            type="password"
+            required
+            value={form.currentPassword}
+            onChange={(event) => setForm({ ...form, currentPassword: event.target.value })}
+          />
+        </Field>
+
+        <Field label="New password" hint="Upper case, lower case, a digit and a symbol, 8 or more">
+          <Input
+            type="password"
+            required
+            value={form.newPassword}
+            onChange={(event) => setForm({ ...form, newPassword: event.target.value })}
+          />
+        </Field>
+
+        {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
+
+        <Button type="submit" loading={busy} className="w-full">
+          Change password
+        </Button>
+      </form>
+    </AuthShell>
+  )
 }

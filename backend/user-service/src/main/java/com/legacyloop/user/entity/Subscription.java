@@ -66,4 +66,3 @@ public class Subscription {
         return status != Status.EXPIRED && expiresAt.isAfter(Instant.now());
     }
 }
-

@@ -80,4 +80,3 @@ public class PaymentOrder {
     @Column(name = "paid_at")
     private Instant paidAt;
 }
-

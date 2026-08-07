@@ -88,4 +88,3 @@ public class JobApplication {
     @Column(name = "last_updated_at")
     private Instant lastUpdatedAt;
 }
-

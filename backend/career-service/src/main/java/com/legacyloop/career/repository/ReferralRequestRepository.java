@@ -16,4 +16,3 @@ public interface ReferralRequestRepository extends JpaRepository<ReferralRequest
 
     long countByStatus(ReferralStatus status);
 }
-

@@ -66,4 +66,3 @@ public class Company {
     @Builder.Default
     private boolean active = true;
 }
-

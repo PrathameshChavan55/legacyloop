@@ -49,4 +49,3 @@ public interface JobRepository extends JpaRepository<Job, Long> {
     @Query("select j.company.name, count(j) from Job j group by j.company.name order by count(j) desc")
     List<Object[]> countByCompany(Pageable pageable);
 }
-

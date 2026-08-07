@@ -87,4 +87,3 @@ public class AiController {
         return ApiResponse.ok(aiService.interviewFeedback(request));
     }
 }
-
